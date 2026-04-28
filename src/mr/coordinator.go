@@ -6,10 +6,37 @@ import "os"
 import "net/rpc"
 import "net/http"
 
+type TaskState int
+
+const (
+	Idle TaskState = 0
+	InProgress TaskState = 1
+	Completed	 TaskState = 2
+)
+
+type Phase int
+
+const (
+	MapPhase Phase = 0
+	ReducePhase Phase = 1
+	DonePhase Phase = 2
+)
 
 type Coordinator struct {
 	// Your definitions here.
+	// states of tasks
+	mapTasks []TaskState
+	reduceTasks []TaskState
+	// number of reduce tasks
+	nReduce int
+	// start time of each task, used for timeout detection
+	mapTaskStartTime []int64
+	reduceTaskStartTime []int64
+	// current phase of the job map/reduce/done
+	phase Phase
 
+	// mutex lock for workers to access the coordinator's state
+	coordinaterLock sync.Mutex
 }
 
 // Your code here -- RPC handlers for the worker to call.
