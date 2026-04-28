@@ -44,8 +44,50 @@ type Coordinator struct {
 // Your code here -- RPC handlers for the worker to call.
 
 func (c *Coordinator) GetTask(args *GetTaskArgs, reply *GetTaskReply) error {
-	
-	return nil
+	c.coordinaterLock.Lock()
+	defer c.coordinaterLock.Unlock()
+	switch c.phase {
+
+	// find an idle map task first
+	case MapPhase:
+		for i, state := range c.mapTasks {
+			if state == Idle {
+				c.mapTasks[i] = InProgress
+				c.mapTaskStartTime[i] = time.Now()
+				reply.TaskType = MapTask
+				reply.TaskId = i
+				reply.FileName = c.inputFiles[i]
+				reply.ReduceN = c.nReduce
+				return nil
+			}
+		}
+		// if no idle task, ask worker to wait
+		reply.TaskType = Wait
+		return nil
+
+	// if no idle map task, find an idle reduce task
+	case ReducePhase:
+		for i, state := range c.reduceTasks {
+			if state == Idle {
+				c.reduceTasks[i] = InProgress
+				c.reduceTaskStartTime[i] = time.Now()
+				reply.TaskType = ReduceTask
+				reply.TaskId = i
+				reply.MapM = len(c.inputFiles)
+				return nil
+			}
+		}
+		// if no idle task, ask worker to wait
+		reply.TaskType = Wait
+		return nil
+
+	// if no idle map/reduce task, ask worker to exit
+	case DonePhase:
+		reply.TaskType = Exit
+		return nil
+	}
+	// if no idle task, ask worker to wait
+	return fmt.Errorf("invalid phase")
 }
 
 func (c *Coordinator) ReportTask(args *ReportTaskArgs, reply *ReportTaskReply) error {
