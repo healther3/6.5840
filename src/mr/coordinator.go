@@ -12,6 +12,7 @@ const (
 	Idle TaskState = 0
 	InProgress TaskState = 1
 	Completed	 TaskState = 2
+	Failed TaskState = 3
 )
 
 type Phase int
@@ -24,14 +25,15 @@ const (
 
 type Coordinator struct {
 	// Your definitions here.
+	inputFiles []string
 	// states of tasks
 	mapTasks []TaskState
 	reduceTasks []TaskState
 	// number of reduce tasks
 	nReduce int
 	// start time of each task, used for timeout detection
-	mapTaskStartTime []int64
-	reduceTaskStartTime []int64
+	mapTaskStartTime []time.Time
+	reduceTaskStartTime []time.Time
 	// current phase of the job map/reduce/done
 	phase Phase
 
@@ -40,6 +42,16 @@ type Coordinator struct {
 }
 
 // Your code here -- RPC handlers for the worker to call.
+
+func (c *Coordinator) GetTask(args *GetTaskArgs, reply *GetTaskReply) error {
+	
+	return nil
+}
+
+func (c *Coordinator) ReportTask(args *ReportTaskArgs, reply *ReportTaskReply) error {
+	
+	return nil
+}
 
 // an example RPC handler.
 //
@@ -80,8 +92,15 @@ func MakeCoordinator(sockname string, files []string, nReduce int) *Coordinator 
 	c := Coordinator{}
 
 	// Your code here.
+	c.inputFiles = files
+	c.nReduce = nReduce
+	c.mapTasks = make([]TaskState, len(files))
+	c.reduceTasks = make([]TaskState, nReduce)
+	c.mapTaskStartTime = make([]time.Time, len(files))
+	c.reduceTaskStartTime = make([]time.Time, nReduce)
+	c.phase = MapPhase
 
-
+	// coordinator listens for RPCs from workers
 	c.server(sockname)
 	return &c
 }

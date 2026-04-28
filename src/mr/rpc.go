@@ -11,13 +11,42 @@ package mr
 // and reply for an RPC.
 //
 
-type ExampleArgs struct {
-	X int
+type TaskType int
+
+const (
+	MapTask TaskType = 0
+	ReduceTask TaskType = 1
+	Wait TaskType = 2
+	Exit TaskType = 3
+)
+
+type GetTaskArgs struct {
+	// ask for task need no information
 }
 
-type ExampleReply struct {
-	Y int
+type GetTaskReply struct {
+	// map task or reduce task
+	TaskType TaskType
+	// #task
+	TaskId int
+	// number of reduce tasks, used for map tasks to hash
+	ReduceN int
+	// for reduce tasks, the number of map tasks, used for reduce tasks to read intermediate files
+	MapM int
+	// for map tasks, the input file name
+	FileName string // for map tasks, the input file name
 }
 
-// Add your RPC definitions here.
+type ReportTaskArgs struct {
+	// task type
+	TaskType TaskType
+	// task id
+	TaskId int
+	// whether the task is completed successfully
+	Success bool
+}
+
+type ReportTaskReply struct {
+	// no reply needed for now
+}
 
