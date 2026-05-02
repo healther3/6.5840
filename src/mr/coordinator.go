@@ -12,7 +12,6 @@ const (
 	Idle TaskState = 0
 	InProgress TaskState = 1
 	Completed	 TaskState = 2
-	Failed TaskState = 3
 )
 
 type Phase int
@@ -54,10 +53,10 @@ func (c *Coordinator) GetTask(args *GetTaskArgs, reply *GetTaskReply) error {
 			if state == Idle {
 				c.mapTasks[i] = InProgress
 				c.mapTaskStartTime[i] = time.Now()
-				reply.TaskType = MapTask
-				reply.TaskId = i
-				reply.FileName = c.inputFiles[i]
-				reply.ReduceN = c.nReduce
+				reply.TaskType := MapTask
+				reply.TaskId := i
+				reply.FileName := c.inputFiles[i]
+				reply.ReduceN := c.nReduce
 				return nil
 			}
 		}
@@ -71,9 +70,9 @@ func (c *Coordinator) GetTask(args *GetTaskArgs, reply *GetTaskReply) error {
 			if state == Idle {
 				c.reduceTasks[i] = InProgress
 				c.reduceTaskStartTime[i] = time.Now()
-				reply.TaskType = ReduceTask
-				reply.TaskId = i
-				reply.MapM = len(c.inputFiles)
+				reply.TaskType := ReduceTask
+				reply.TaskId := i
+				reply.MapM := len(c.inputFiles)
 				return nil
 			}
 		}
@@ -91,8 +90,49 @@ func (c *Coordinator) GetTask(args *GetTaskArgs, reply *GetTaskReply) error {
 }
 
 func (c *Coordinator) ReportTask(args *ReportTaskArgs, reply *ReportTaskReply) error {
-	
-	return nil
+	// set mutex lock to coordinator
+	c.coordinaterLock.Lock()
+	defer c.coordinaterLock.Unlock()
+	taskType := args.TaskType
+	TaskId := args.TaskId
+	success := args.Success
+
+	// if task is completed successfully, update the state of the task and decide whether to move to the next phase
+	if success {
+		switch taskType {
+		case MapTask:
+			c.mapTasks[TaskId] = Completed
+			// if all map tasks are completed, move to reduce phase
+			for _, state := range c.mapTasks {
+				if state != Completed {
+					return nil
+				}
+			}
+			c.phase = ReducePhase
+			return nil
+		case ReduceTask:
+			c.reduceTasks[TaskId] = Completed
+			// if all reduce tasks are completed, move to done phase
+			for _, state := range c.reduceTasks {
+				if state != Completed {
+					return nil
+				}
+			}
+			c.phase = DonePhase
+		}
+	} else {
+		// if task is failed, update the state of the task to idle for retrying
+		switch taskType {
+		case MapTask:
+			c.mapTasks[TaskId] = Idle
+			return nil
+		case ReduceTask:
+			c.reduceTasks[TaskId] = Idle
+			return nil
+		}
+
+	return fmt.Errorf("invalid phase")
+	}
 }
 
 // an example RPC handler.
