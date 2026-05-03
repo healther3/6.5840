@@ -54,28 +54,74 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 			}
 			file.Close()
 			kva := mapf(reply.FileName, string(content))
-			// intermediate = append(intermediate, kva...)
-			for _, kv := range kva {
-				// write the kv pair to intermediate file (using hash function to determine which reduce task it belongs to)
-				reduceTaskNum := ihash(kv.Key) % reply.NReduce
-				// intermediate file name format: mr-X-Y, where X is the map task number and Y is the reduce task number
-				intermediateFileName := fmt.Sprintf("mr-%d-%d", reply.TaskNum, reduceTaskNum)
+
+			// Prepare intermediate files for reduce tasks
+			intermediateFiles := make([]*os.File, reply.NReduce)
+			encoders := make([]*json.Encoder, reply.NReduce)
+
+			for i := 0; i < reply.NReduce; i++ {
+				intermediateFileName := fmt.Sprintf("mr-%d-%d-tmp", reply.TaskId, i)
 				intermediateFile, err := os.Create(intermediateFileName)
 				if err != nil {
 					log.Fatalf("cannot create intermediate file %v", intermediateFileName)
 				}
+				intermediateFiles[i] = intermediateFile
+				encoders[i] = json.NewEncoder(intermediateFile)
+			}
+
+			// write the kv pairs to temporary intermediate files
+			for _, kv := range kva {
+				// write the kv pair to intermediate file (using hash function to determine which reduce task it belongs to)
+				reduceTaskNum := ihash(kv.Key) % reply.NReduce
 				// encode the kv pair to intermediate file using json encoder
-				enc := json.NewEncoder(intermediateFile)
+				enc := encoders[reduceTaskNum]
 				err = enc.Encode(&kv)
 				if err != nil {
 					log.Fatalf("cannot encode kv pair %v", kv)
 				}
-				intermediateFile.Close()
-				// write the kv pair to intermediate file	
 			}
+
+			// finish writing intermediate files, rename them to final names
+			for i := 0; i < reply.NReduce; i++ {
+				// get the temporary intermediate file name and rename it to final intermediate file name
+				tmpFile := intermediateFiles[i]
+				tmpFileName := tmpFile.Name()
+				// close the temporary intermediate file before renaming
+				err = tmpFile.Close()
+				if err != nil {
+					log.Fatalf("cannot close intermediate file %v", tmpFileName)
+				}
+				// rename the temporary intermediate file to final intermediate file name
+				intermediateFileName := fmt.Sprintf("mr-%d-%d", reply.TaskId, i)
+				err = os.Rename(tmpFileName, intermediateFileName)
+				if err != nil {
+					log.Fatalf("cannot rename intermediate file %v to %v", tmpFileName, intermediateFileName)
+				}
+			}
+
+
 
 		case ReduceTask:
 			// read intermediate files and sort by key
+			kvMap := make(map[string][]string)
+			
+			for i := 0; i < reply.MapM; i++ {
+				intermediateFileName := fmt.Sprintf("mr-%d-%d", i, reply.TaskNum)
+				intermediateFile, err := os.Open(intermediateFileName)
+				if err != nil {
+					log.Fatalf("cannot open intermediate file %v", intermediateFileName)
+				}
+				dec := json.NewDecoder(intermediateFile)
+				for {
+					var kv KeyValue
+					if err := dec.Decode(&kv); err != nil {
+						break
+					}
+					// store the kv pair in a map, where key is the key and value is a slice of values
+					kvMap[kv.Key] = append(kvMap[kv.Key], kv.Value)
+				}
+				intermediateFile.Close()
+			}
 		case Wait:
 			// wait for a while and ask for a task again
 		case Exit:
