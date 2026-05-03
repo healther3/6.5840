@@ -5,6 +5,9 @@ import "net"
 import "os"
 import "net/rpc"
 import "net/http"
+import "sync"
+import "time"
+import "fmt"
 
 type TaskState int
 
@@ -53,10 +56,10 @@ func (c *Coordinator) GetTask(args *GetTaskArgs, reply *GetTaskReply) error {
 			if state == Idle {
 				c.mapTasks[i] = InProgress
 				c.mapTaskStartTime[i] = time.Now()
-				reply.TaskType := MapTask
-				reply.TaskId := i
-				reply.FileName := c.inputFiles[i]
-				reply.ReduceN := c.nReduce
+				reply.TaskType = MapTask
+				reply.TaskId = i
+				reply.FileName = c.inputFiles[i]
+				reply.ReduceN = c.nReduce
 				return nil
 			}
 		}
@@ -70,9 +73,9 @@ func (c *Coordinator) GetTask(args *GetTaskArgs, reply *GetTaskReply) error {
 			if state == Idle {
 				c.reduceTasks[i] = InProgress
 				c.reduceTaskStartTime[i] = time.Now()
-				reply.TaskType := ReduceTask
-				reply.TaskId := i
-				reply.MapM := len(c.inputFiles)
+				reply.TaskType = ReduceTask
+				reply.TaskId = i
+				reply.MapM = len(c.inputFiles)
 				return nil
 			}
 		}
@@ -130,18 +133,17 @@ func (c *Coordinator) ReportTask(args *ReportTaskArgs, reply *ReportTaskReply) e
 			c.reduceTasks[TaskId] = Idle
 			return nil
 		}
-
-	return fmt.Errorf("invalid phase")
 	}
+	return fmt.Errorf("invalid phase")
 }
 
 // an example RPC handler.
 //
 // the RPC argument and reply types are defined in rpc.go.
-func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
-	reply.Y = args.X + 1
-	return nil
-}
+// func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
+// 	reply.Y = args.X + 1
+// 	return nil
+// }
 
 
 // start a thread that listens for RPCs from worker.go

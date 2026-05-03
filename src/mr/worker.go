@@ -5,13 +5,25 @@ import "log"
 import "net/rpc"
 import "hash/fnv"
 import "os"
-
+import "sort"
+import "time"
+import "io/ioutil"
+import "encoding/json"
 
 // Map functions return a slice of KeyValue.
 type KeyValue struct {
 	Key   string
 	Value string
 }
+
+// for sorting by key.
+type ByKey []KeyValue
+
+// for sorting by key.
+func (a ByKey) Len() int           { return len(a) }
+func (a ByKey) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByKey) Less(i, j int) bool { return a[i].Key < a[j].Key }
+
 
 // use ihash(key) % NReduce to choose the reduce
 // task number for each KeyValue emitted by Map.
@@ -56,13 +68,13 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 			kva := mapf(reply.FileName, string(content))
 
 			// Prepare intermediate files for reduce tasks
-			intermediateFiles := make([]*os.File, reply.NReduce)
-			encoders := make([]*json.Encoder, reply.NReduce)
+			intermediateFiles := make([]*os.File, reply.ReduceN)
+			encoders := make([]*json.Encoder, reply.ReduceN)
 
-			for i := 0; i < reply.NReduce; i++ {
-				intermediateFile:= os.CreateTemp("", "mr-tmp-*")
+			for i := 0; i < reply.ReduceN; i++ {
+				intermediateFile, err := os.CreateTemp("", "mr-tmp-*")
 				if err != nil {
-					log.Fatalf("cannot create intermediate file %v", intermediateFileName)
+					log.Fatalf("cannot create intermediate file %v", intermediateFile.Name())
 				}
 				intermediateFiles[i] = intermediateFile
 				encoders[i] = json.NewEncoder(intermediateFile)
@@ -71,7 +83,7 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 			// write the kv pairs to temporary intermediate files
 			for _, kv := range kva {
 				// write the kv pair to intermediate file (using hash function to determine which reduce task it belongs to)
-				reduceTaskNum := ihash(kv.Key) % reply.NReduce
+				reduceTaskNum := ihash(kv.Key) % reply.ReduceN
 				// encode the kv pair to intermediate file using json encoder
 				enc := encoders[reduceTaskNum]
 				err = enc.Encode(&kv)
@@ -81,7 +93,7 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 			}
 
 			// finish writing intermediate files, rename them to final names
-			for i := 0; i < reply.NReduce; i++ {
+			for i := 0; i < reply.ReduceN; i++ {
 				// get the temporary intermediate file name and rename it to final intermediate file name
 				tmpFile := intermediateFiles[i]
 				tmpFileName := tmpFile.Name()
@@ -116,7 +128,7 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 
 		case ReduceTask:
 			// read intermediate files and sort by key
-			kvMap := []mr.KeyValue{}
+			kvMap := []KeyValue{}
 			
 			for i := 0; i < reply.MapM; i++ {
 				// read each intermediate file and save the kv pairs to kvMap
@@ -128,7 +140,7 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 				dec := json.NewDecoder(intermediateFile)
 				for {
 					// decode the kv pair and save to kvMap
-					var kv mr.KeyValue
+					var kv KeyValue
 					err = dec.Decode(&kv)
 					if err != nil {
 						break
@@ -198,34 +210,35 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 			log.Printf("worker %d exit", os.Getpid())
 			return
 		}
+	}
 }
 
 // example function to show how to make an RPC call to the coordinator.
 //
 // the RPC argument and reply types are defined in rpc.go.
-func CallExample() {
+// func CallExample() {
 
-	// declare an argument structure.
-	args := ExampleArgs{}
+// 	// declare an argument structure.
+// 	args := ExampleArgs{}
 
-	// fill in the argument(s).
-	args.X = 99
+// 	// fill in the argument(s).
+// 	args.X = 99
 
-	// declare a reply structure.
-	reply := ExampleReply{}
+// 	// declare a reply structure.
+// 	reply := ExampleReply{}
 
-	// send the RPC request, wait for the reply.
-	// the "Coordinator.Example" tells the
-	// receiving server that we'd like to call
-	// the Example() method of struct Coordinator.
-	ok := call("Coordinator.Example", &args, &reply)
-	if ok {
-		// reply.Y should be 100.
-		fmt.Printf("reply.Y %v\n", reply.Y)
-	} else {
-		fmt.Printf("call failed!\n")
-	}
-}
+// 	// send the RPC request, wait for the reply.
+// 	// the "Coordinator.Example" tells the
+// 	// receiving server that we'd like to call
+// 	// the Example() method of struct Coordinator.
+// 	ok := call("Coordinator.Example", &args, &reply)
+// 	if ok {
+// 		// reply.Y should be 100.
+// 		fmt.Printf("reply.Y %v\n", reply.Y)
+// 	} else {
+// 		fmt.Printf("call failed!\n")
+// 	}
+// }
 
 // send an RPC request to the coordinator, wait for the response.
 // usually returns true.
