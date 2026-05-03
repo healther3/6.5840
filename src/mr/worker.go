@@ -60,8 +60,7 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 			encoders := make([]*json.Encoder, reply.NReduce)
 
 			for i := 0; i < reply.NReduce; i++ {
-				intermediateFileName := os.createTemp("", "mr-tmp-*")
-				intermediateFile, err := os.Create(intermediateFileName)
+				intermediateFile:= os.CreateTemp("", "mr-tmp-*")
 				if err != nil {
 					log.Fatalf("cannot create intermediate file %v", intermediateFileName)
 				}
@@ -121,7 +120,7 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 			
 			for i := 0; i < reply.MapM; i++ {
 				// read each intermediate file and save the kv pairs to kvMap
-				intermediateFileName := fmt.Sprintf("mr-%d-%d", i, reply.TaskNum)
+				intermediateFileName := fmt.Sprintf("mr-%d-%d", i, reply.TaskId)
 				intermediateFile, err := os.Open(intermediateFileName)
 				if err != nil {
 					log.Fatalf("cannot open intermediate file %v", intermediateFileName)
@@ -169,7 +168,7 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 
 			tmpOutputFile.Close()
 			// rename the temporary output file to final output file name
-			finalOutputFileName := fmt.Sprintf("mr-out-%d", reply.TaskNum)
+			finalOutputFileName := fmt.Sprintf("mr-out-%d", reply.TaskId)
 			err = os.Rename(tmpOutputFileName, finalOutputFileName)
 			if err != nil {
 				log.Fatalf("cannot rename temporary output file %v to final output file %v", tmpOutputFileName, finalOutputFileName)
@@ -178,7 +177,7 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 			// report the reduce task is completed
 			reportArgs := ReportTaskArgs{
 				TaskType: ReduceTask,
-				TaskId: reply.TaskNum,
+				TaskId: reply.TaskId,
 				Success: true,
 			}
 			reportReply := ReportTaskReply{}
