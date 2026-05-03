@@ -183,5 +183,41 @@ func MakeCoordinator(sockname string, files []string, nReduce int) *Coordinator 
 
 	// coordinator listens for RPCs from workers
 	c.server(sockname)
+
+	// check for timeout tasks and reset them to idle for retrying
+	go func ()  {
+		for {
+			time.Sleep(time.Second)
+			c.coordinaterLock.Lock()
+
+			// if the job is done, exit the goroutine
+			if c.phase == DonePhase {
+				c.coordinaterLock.Unlock()
+				return
+			}
+
+			switch c.phase {
+				// if the job is in map/reduce phase, check for timeout tasks and reset them to idle for retrying
+			case MapPhase:
+				for i, state := range c.mapTasks {
+					if state == InProgress {
+						if time.Since(c.mapTaskStartTime[i]) > 10*time.Second {
+							c.mapTasks[i] = Idle
+						}
+					}
+				}
+			case ReducePhase:
+				// if the job is in reduce phase, check for timeout tasks and reset them to idle for retrying
+				for i, state := range c.reduceTasks {
+					if state == InProgress {
+						if time.Since(c.reduceTaskStartTime[i]) > 10*time.Second {
+							c.reduceTasks[i] = Idle
+						}
+					}
+				}
+			}
+			c.coordinaterLock.Unlock()
+		}
+	} ()
 	return &c
 }
