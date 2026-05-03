@@ -99,6 +99,22 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 				}
 			}
 
+			// report the map task is completed
+			reportArgs := ReportTaskArgs{
+				TaskType: MapTask,
+				TaskId: reply.TaskId,
+				Success: true,
+			}
+			reportReply := ReportTaskReply{}
+			ok = call("Coordinator.ReportTask", &reportArgs, &reportReply)
+			if !ok {
+				log.Printf("call failed!")
+				return
+			}
+
+			// ask for a new task
+			continue
+
 		case ReduceTask:
 			// read intermediate files and sort by key
 			kvMap := []mr.KeyValue{}
@@ -159,10 +175,28 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 				log.Fatalf("cannot rename temporary output file %v to final output file %v", tmpOutputFileName, finalOutputFileName)
 				}
 
+			// report the reduce task is completed
+			reportArgs := ReportTaskArgs{
+				TaskType: ReduceTask,
+				TaskId: reply.TaskNum,
+				Success: true,
+			}
+			reportReply := ReportTaskReply{}
+			ok = call("Coordinator.ReportTask", &reportArgs, &reportReply)
+			if !ok {
+				log.Printf("call failed!")
+				return
+			}
+
+			// ask for a new task
+			continue
 		case Wait:
 			// wait for a while and ask for a task again
+			time.Sleep(time.Second * 3)
+			continue
 		case Exit:
 			// task finished exit the worker
+			log.Printf("worker %d exit", os.Getpid())
 			return
 		}
 }
