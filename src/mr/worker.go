@@ -54,7 +54,26 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 			}
 			file.Close()
 			kva := mapf(reply.FileName, string(content))
-			intermediate = append(intermediate, kva...)
+			// intermediate = append(intermediate, kva...)
+			for _, kv := range kva {
+				// write the kv pair to intermediate file (using hash function to determine which reduce task it belongs to)
+				reduceTaskNum := ihash(kv.Key) % reply.NReduce
+				// intermediate file name format: mr-X-Y, where X is the map task number and Y is the reduce task number
+				intermediateFileName := fmt.Sprintf("mr-%d-%d", reply.TaskNum, reduceTaskNum)
+				intermediateFile, err := os.Create(intermediateFileName)
+				if err != nil {
+					log.Fatalf("cannot create intermediate file %v", intermediateFileName)
+				}
+				// encode the kv pair to intermediate file using json encoder
+				enc := json.NewEncoder(intermediateFile)
+				err = enc.Encode(&kv)
+				if err != nil {
+					log.Fatalf("cannot encode kv pair %v", kv)
+				}
+				intermediateFile.Close()
+				// write the kv pair to intermediate file	
+			}
+
 		case ReduceTask:
 			// read intermediate files and sort by key
 		case Wait:
