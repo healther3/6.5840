@@ -125,11 +125,12 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 			// sort the kv pairs by key
 			sort.Sort(ByKey(kvMap))
 
-			// create output file for reduce task
-			oname := fmt.Sprintf("mr-out-%d", reply.TaskNum)
-			ofile, err := os.Create(oname)
+			// create temporary output file for reduce task
+			tmpOutputFile, err := os.CreateTemp("", "mr-out-tmp-*")
+			tmpOutputFileName := tmpOutputFile.Name()
+
 			if err != nil {
-				log.Fatalf("cannot create output file %v", oname)
+				log.Fatalf("cannot create temporary output file %v", tmpOutputFile.Name())
 			}
 
 			// call reducef on each distinct key in kvMap, and write the output to output file
@@ -146,11 +147,17 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 				output := reducef(kvMap[i].Key, values)
 				
 				// this is the correct format for each line of Reduce output.
-				fmt.Fprintf(ofile, "%v %v\n", kvMap[i].Key, output)
+				fmt.Fprintf(tmpOutputFile, "%v %v\n", kvMap[i].Key, output)
 				i = j
 			}
 
-			ofile.Close()
+			tmpOutputFile.Close()
+			// rename the temporary output file to final output file name
+			finalOutputFileName := fmt.Sprintf("mr-out-%d", reply.TaskNum)
+			err = os.Rename(tmpOutputFileName, finalOutputFileName)
+			if err != nil {
+				log.Fatalf("cannot rename temporary output file %v to final output file %v", tmpOutputFileName, finalOutputFileName)
+				}
 
 		case Wait:
 			// wait for a while and ask for a task again
