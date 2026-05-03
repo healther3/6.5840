@@ -31,10 +31,38 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 	coordSockName = sockname
 
 	// Your worker implementation here.
-
-	// uncomment to send the Example RPC to the coordinator.
-	// CallExample()
-
+		for {
+		// ask coordinator for a task
+		args := GetTaskArgs{}
+		reply := GetTaskReply{}
+		ok := call("Coordinator.GetTask", &args, &reply)
+		// if call failed, exit
+		if !ok {
+			log.Printf("call failed!")
+			return
+		}
+		switch reply.TaskType {
+		case MapTask:
+			// read the input file
+			file, err := os.Open(reply.FileName)
+			if err != nil {
+				log.Fatalf("cannot open %v", reply.FileName)
+			}
+			content, err := ioutil.ReadAll(file)
+			if err != nil {
+				log.Fatalf("cannot read %v", reply.FileName)
+			}
+			file.Close()
+			kva := mapf(reply.FileName, string(content))
+			intermediate = append(intermediate, kva...)
+		case ReduceTask:
+			// read intermediate files and sort by key
+		case Wait:
+			// wait for a while and ask for a task again
+		case Exit:
+			// task finished exit the worker
+			return
+		}
 }
 
 // example function to show how to make an RPC call to the coordinator.
