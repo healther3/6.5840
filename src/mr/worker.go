@@ -60,7 +60,7 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 			encoders := make([]*json.Encoder, reply.NReduce)
 
 			for i := 0; i < reply.NReduce; i++ {
-				intermediateFileName := fmt.Sprintf("mr-%d-%d-tmp", reply.TaskId, i)
+				intermediateFileName := os.createTemp("", "mr-tmp-*")
 				intermediateFile, err := os.Create(intermediateFileName)
 				if err != nil {
 					log.Fatalf("cannot create intermediate file %v", intermediateFileName)
@@ -99,13 +99,12 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 				}
 			}
 
-
-
 		case ReduceTask:
 			// read intermediate files and sort by key
-			kvMap := make(map[string][]string)
+			kvMap := []mr.KeyValue{}
 			
 			for i := 0; i < reply.MapM; i++ {
+				// read each intermediate file and save the kv pairs to kvMap
 				intermediateFileName := fmt.Sprintf("mr-%d-%d", i, reply.TaskNum)
 				intermediateFile, err := os.Open(intermediateFileName)
 				if err != nil {
@@ -113,15 +112,46 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 				}
 				dec := json.NewDecoder(intermediateFile)
 				for {
-					var kv KeyValue
-					if err := dec.Decode(&kv); err != nil {
+					// decode the kv pair and save to kvMap
+					var kv mr.KeyValue
+					err = dec.Decode(&kv)
+					if err != nil {
 						break
 					}
-					// store the kv pair in a map, where key is the key and value is a slice of values
-					kvMap[kv.Key] = append(kvMap[kv.Key], kv.Value)
+					kvMap = append(kvMap, kv)
 				}
 				intermediateFile.Close()
 			}
+			// sort the kv pairs by key
+			sort.Sort(ByKey(kvMap))
+
+			// create output file for reduce task
+			oname := fmt.Sprintf("mr-out-%d", reply.TaskNum)
+			ofile, err := os.Create(oname)
+			if err != nil {
+				log.Fatalf("cannot create output file %v", oname)
+			}
+
+			// call reducef on each distinct key in kvMap, and write the output to output file
+			for i := 0; i < len(kvMap); {
+				j := i + 1
+				for j < len(kvMap) && kvMap[j].Key == kvMap[i].Key {
+					j++
+				}
+				values := []string{}
+				// collect the values for the same key
+				for k := i; k < j; k++ {
+					values = append(values, kvMap[k].Value)
+				}
+				output := reducef(kvMap[i].Key, values)
+				
+				// this is the correct format for each line of Reduce output.
+				fmt.Fprintf(ofile, "%v %v\n", kvMap[i].Key, output)
+				i = j
+			}
+
+			ofile.Close()
+
 		case Wait:
 			// wait for a while and ask for a task again
 		case Exit:
