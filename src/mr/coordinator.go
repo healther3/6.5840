@@ -122,6 +122,7 @@ func (c *Coordinator) ReportTask(args *ReportTaskArgs, reply *ReportTaskReply) e
 				}
 			}
 			c.phase = DonePhase
+			retrun nil
 		}
 	} else {
 		// if task is failed, update the state of the task to idle for retrying
